@@ -377,6 +377,9 @@ static void alu_calculate(uint64_t input_1, uint64_t input_2, enum alu_operation
 
 static char *write_back_stage()
 {
+	if (mem_wb_reg.rd == 0)
+		return mem_wb_reg.name;
+
 	if (mem_wb_reg.ctl_wb.mem_to_reg == 1)
 		register_file[mem_wb_reg.rd] = mem_wb_reg.data_m;
 	else
