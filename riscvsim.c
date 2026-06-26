@@ -35,7 +35,6 @@ struct instructions *inst_tail = NULL;
 static void print_horizon()
 {
 	printf("==========================================\n");
-	return;
 }
 
 static void print_register_file()
@@ -49,7 +48,6 @@ static void print_register_file()
 	}
 	print_horizon();
 	printf("\n");
-	return;
 }
 
 static void read_regs_txt(char *file_name)
@@ -87,7 +85,6 @@ static void read_regs_txt(char *file_name)
 
 	free(line);
 	fclose(regs_file);
-	return;
 }
 
 static void read_inst_txt(char *file_name)
@@ -146,7 +143,6 @@ static void read_inst_txt(char *file_name)
 			continue;
 		}
 
-		// TODO : sscanf로직 만들기
 		if ('i' == inst_name[strlen(inst_name) - 1]) {
 			inst_node->opcode = 0b0010011; // 나머지 I-type
 
@@ -193,12 +189,11 @@ static void read_inst_txt(char *file_name)
 
 	free(inst_line);
 	fclose(insts_file);
-	return;
 }
 
-static void print_inst_linked_list(struct instructions *head)
+static void print_inst_linked_list()
 {
-	struct instructions *ptr = head;
+	struct instructions *ptr = inst_head;
 
 	printf("f7|imm  rs2   rs1   f3   rd    opcode\n");
 	while (ptr != NULL) {
@@ -211,33 +206,46 @@ static void print_inst_linked_list(struct instructions *head)
 		printf("\n");
 		ptr = ptr->next;
 	}
-	return;
+}
+
+static void free_inst_linked_list()
+{
+	struct instructions *ptr = inst_head;
+	while (ptr != NULL) {
+		struct instructions *temp = ptr->next;
+		free(ptr);
+		ptr = temp;
+	}
+	inst_head = NULL;
+	inst_tail = NULL;
 }
 
 int main(int argc, char *argv[])
 {
-	// command line parameter validation
+	// ======================
 	if (argc < 3) {
 		printf("usage ... 2 files\n");
 		exit(EXIT_FAILURE);
 	}
 
+	// =======================
 	// print_register_file();
 	read_regs_txt(argv[1]);
 	// print_register_file();
 
+	// =======================
 	read_inst_txt(argv[2]);
-	// linked list traversal
-	print_inst_linked_list(inst_head);
+	// print_inst_linked_list();
+
 	// ===========main loop========
 	while (1) {
-		// clock rising
+		// up
 		// IF -> ID -> EX -> MEM -> WB
 		// pipeline register write
 		// WB write
 		//
 
-		// clock falling
+		// down
 		// IF -> ID -> EX -> MEM -> WB
 		// pipeline register read
 		// ID read
@@ -247,7 +255,7 @@ int main(int argc, char *argv[])
 	}
 
 	// =========자원해제==========
-	// free() instructions linked list 로직
+	free_inst_linked_list();
 
 	return 0;
 }
