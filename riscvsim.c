@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 enum alu_operations { ADD, SUB, SLL, SRL, OR, AND, XOR };
 
@@ -441,13 +442,6 @@ static char *instruction_fetch_stage()
 	if_id_reg.inst.rd = inst_pc->rd;
 	if_id_reg.inst.opcode = inst_pc->opcode;
 
-	inst_pc = inst_pc->next;
-
-	if (inst_pc == NULL) {
-		printf("pc == NULL");
-		exit(EXIT_SUCCESS);
-	}
-
 	return inst_pc->name;
 }
 
@@ -473,19 +467,51 @@ int main(int argc, char *argv[])
 	int cycle = 1;
 
 	while (1) {
-		char wb_name[5] = {0};
-		char mem_name[5] = {0};
-		char ex_name[5] = {0};
-		char id_name[5] = {0};
-		char if_name[5] = {0};
+		char *wb_name;
+		char *mem_name;
+		char *ex_name;
+		char *id_name;
+		char *if_name;
 
-		strcpy(wb_name, write_back_stage());
-		memory_stage();
-		excute_stage();
-		instruction_decode_stage();
-		instruction_fetch_stage();
-		printf("%-8d%-8s%-8s%-8s%-8s%s\n", cycle, wb_name, wb_name, wb_name, wb_name,
+		wb_name = write_back_stage();
+
+		mem_name = memory_stage();
+
+		ex_name = excute_stage();
+
+		id_name = instruction_decode_stage();
+
+		if (inst_pc != NULL) {
+			if_name = instruction_fetch_stage();
+			inst_pc = inst_pc->next;
+		} else {
+
+			strcpy(if_name, "--");
+		}
+
+		if (*wb_name == 0)
+			strcpy(wb_name, "--");
+		if (*mem_name == 0)
+			strcpy(mem_name, "--");
+		if (*ex_name == 0)
+			strcpy(ex_name, "--");
+		if (*id_name == 0)
+			strcpy(id_name, "--");
+
+		if (strcmp(if_name, "--") == 0 && strcmp(id_name, "--") == 0 &&
+		    strcmp(ex_name, "--") == 0 && strcmp(mem_name, "--") == 0 &&
+		    strcmp(wb_name, "--") == 0) {
+			exit(EXIT_SUCCESS);
+		}
+
+		printf("%-8d%-8s%-8s%-8s%-8s%s\n", cycle, if_name, id_name, ex_name, mem_name,
 		       wb_name);
+
+		strcpy(mem_wb_reg.name, ex_mem_reg.name);
+		strcpy(ex_mem_reg.name, id_ex_reg.name);
+		strcpy(id_ex_reg.name, if_id_reg.name);
+		strcpy(if_id_reg.name, if_name);
+
 		cycle++;
 	}
 
