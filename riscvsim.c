@@ -32,56 +32,33 @@ struct instructions {
 };
 
 // =====================================
-struct control_wb {
+
+struct pipeline_registers {
 	bool mem_to_reg;
 	bool reg_write;
-};
-
-struct control_m {
-	// int branch; // for branch
 	bool mem_write;
 	bool mem_read;
-};
-
-struct control_ex {
 	bool alu_op;
 	bool alu_src;
-};
 
-// =====================================
-struct if_id_pipeline_reg {
-	struct instructions inst;
+	int funct7_or_imm; // 의도적으로 imm은 그냥 이 필드에서 처리함... 단순함을 위해
+	int rs2;
+	int rs1;
+	int funct3;
+	int rd;
+	int opcode;
 	char name[5];
-};
 
-struct id_ex_pipeline_reg {
-	struct instructions inst;
-	struct control_ex ctl_ex;
-	struct control_m ctl_m;
-	struct control_wb ctl_wb;
 	uint64_t data_1;
 	uint64_t data_2;
 	uint64_t extended_imm;
-	int rd;
-	char name[5];
-};
 
-struct ex_mem_pipeline_reg {
-	struct control_m ctl_m;
-	struct control_wb ctl_wb;
-	// uint64_t zero_result; // for branch
-	uint64_t alu_result;
-	uint64_t data_2;
-	int rd;
-	char name[5];
-};
-
-struct mem_wb_pipeline_reg {
-	struct control_wb ctl_wb;
 	uint64_t data_m;
 	uint64_t alu_result;
-	int rd;
-	char name[5];
+};
+
+struct pipeline_registers nop{
+
 };
 
 // ==================================================
@@ -91,12 +68,18 @@ static uint64_t register_file[32] = {(uint64_t)0};
 // 어차피 한 번씩만 지나가니까 전역으로 선언함 (beq도 없고)
 struct instructions *inst_head = NULL;
 struct instructions *inst_tail = NULL;
-struct instructions *inst_pc = NULL;
+struct instructions *pc = NULL;
+struct instructions *pc_next = NULL;
 
-struct if_id_pipeline_reg if_id_reg;
-struct id_ex_pipeline_reg id_ex_reg;
-struct ex_mem_pipeline_reg ex_mem_reg;
-struct mem_wb_pipeline_reg mem_wb_reg;
+struct pipeline_registers if_id_reg;
+struct pipeline_registers id_ex_reg;
+struct pipeline_registers ex_mem_reg;
+struct pipeline_registers mem_wb_reg;
+
+struct pipeline_registers if_id_reg_next;
+struct pipeline_registers id_ex_reg_next;
+struct pipeline_registers ex_mem_reg_next;
+struct pipeline_registers mem_wb_reg_next;
 
 // ====================================================
 
@@ -188,7 +171,7 @@ static void read_inst_txt(char *file_name)
 		if (!inst_head) {
 			inst_head = inst_node;
 			inst_tail = inst_node;
-			inst_pc = inst_node;
+			pc = inst_node;
 		} else {
 			inst_tail->next = inst_node;
 			inst_tail = inst_node;
@@ -294,36 +277,36 @@ static void signal_control(int opcode)
 {
 
 	if (opcode == 0b0000011) { // ld
-		id_ex_reg.ctl_ex.alu_op = 0b00;
-		id_ex_reg.ctl_ex.alu_src = 1;
-		id_ex_reg.ctl_m.mem_read = 1;
-		id_ex_reg.ctl_m.mem_write = 0;
-		id_ex_reg.ctl_wb.mem_to_reg = 1;
-		id_ex_reg.ctl_wb.reg_write = 1;
+		id_ex_reg_next.alu_op = 0b00;
+		id_ex_reg_next.alu_src = 1;
+		id_ex_reg_next.mem_read = 1;
+		id_ex_reg_next.mem_write = 0;
+		id_ex_reg_next.mem_to_reg = 1;
+		id_ex_reg_next.reg_write = 1;
 
 	} else if (opcode == 0b0100011) { // sd
-		id_ex_reg.ctl_ex.alu_op = 0b00;
-		id_ex_reg.ctl_ex.alu_src = 1;
-		id_ex_reg.ctl_m.mem_read = 0;
-		id_ex_reg.ctl_m.mem_write = 1;
-		id_ex_reg.ctl_wb.mem_to_reg = 0;
-		id_ex_reg.ctl_wb.reg_write = 0;
+		id_ex_reg_next.alu_op = 0b00;
+		id_ex_reg_next.alu_src = 1;
+		id_ex_reg_next.mem_read = 0;
+		id_ex_reg_next.mem_write = 1;
+		id_ex_reg_next.mem_to_reg = 0;
+		id_ex_reg_next.reg_write = 0;
 	} else if (opcode == 0b0110011) { // R-type
-		id_ex_reg.ctl_ex.alu_op = 0b10;
-		id_ex_reg.ctl_ex.alu_src = 0;
-		id_ex_reg.ctl_m.mem_read = 0;
-		id_ex_reg.ctl_m.mem_write = 0;
-		id_ex_reg.ctl_wb.mem_to_reg = 0;
-		id_ex_reg.ctl_wb.reg_write = 1;
+		id_ex_reg_next.alu_op = 0b10;
+		id_ex_reg_next.alu_src = 0;
+		id_ex_reg_next.mem_read = 0;
+		id_ex_reg_next.mem_write = 0;
+		id_ex_reg_next.mem_to_reg = 0;
+		id_ex_reg_next.reg_write = 1;
 
 	} else { // I-type
 		// 11로 일단 가정
-		id_ex_reg.ctl_ex.alu_op = 0b11;
-		id_ex_reg.ctl_ex.alu_src = 1;
-		id_ex_reg.ctl_m.mem_read = 0;
-		id_ex_reg.ctl_m.mem_write = 0;
-		id_ex_reg.ctl_wb.mem_to_reg = 0;
-		id_ex_reg.ctl_wb.reg_write = 1;
+		id_ex_reg_next.alu_op = 0b11;
+		id_ex_reg_next.alu_src = 1;
+		id_ex_reg_next.mem_read = 0;
+		id_ex_reg_next.mem_write = 0;
+		id_ex_reg_next.mem_to_reg = 0;
+		id_ex_reg_next.reg_write = 1;
 	}
 }
 
@@ -359,19 +342,19 @@ static void alu_calculate(uint64_t input_1, uint64_t input_2, enum alu_operation
 {
 	switch (alu_operation) {
 	case ADD:
-		ex_mem_reg.alu_result = input_1 + input_2;
+		ex_mem_reg_next.alu_result = input_1 + input_2;
 	case SUB:
-		ex_mem_reg.alu_result = input_1 - input_2;
+		ex_mem_reg_next.alu_result = input_1 - input_2;
 	case SLL:
-		ex_mem_reg.alu_result = input_1 << input_2;
+		ex_mem_reg_next.alu_result = input_1 << input_2;
 	case SRL:
-		ex_mem_reg.alu_result = input_1 >> input_2;
+		ex_mem_reg_next.alu_result = input_1 >> input_2;
 	case OR:
-		ex_mem_reg.alu_result = input_1 | input_2;
+		ex_mem_reg_next.alu_result = input_1 | input_2;
 	case AND:
-		ex_mem_reg.alu_result = input_1 & input_2;
+		ex_mem_reg_next.alu_result = input_1 & input_2;
 	case XOR:
-		ex_mem_reg.alu_result = input_1 ^ input_2;
+		ex_mem_reg_next.alu_result = input_1 ^ input_2;
 	}
 }
 
@@ -380,7 +363,7 @@ static char *write_back_stage()
 	if (mem_wb_reg.rd == 0)
 		return mem_wb_reg.name;
 
-	if (mem_wb_reg.ctl_wb.mem_to_reg == 1)
+	if (mem_wb_reg.mem_to_reg == 1)
 		register_file[mem_wb_reg.rd] = mem_wb_reg.data_m;
 	else
 		register_file[mem_wb_reg.rd] = mem_wb_reg.alu_result;
@@ -390,31 +373,32 @@ static char *write_back_stage()
 
 static char *memory_stage()
 {
-	mem_wb_reg.rd = ex_mem_reg.rd;
+	strcpy(mem_wb_reg_next.name, ex_mem_reg.name);
+	mem_wb_reg_next.rd = ex_mem_reg.rd;
 
-	if (ex_mem_reg.ctl_m.mem_write == 1)
+	if (ex_mem_reg.mem_write == 1)
 		; // 메모리에쓴다()
-	else if (ex_mem_reg.ctl_m.mem_read == 1)
+	else if (ex_mem_reg.mem_read == 1)
 		; // 메모리에서읽어서빼낸다()
 	else
-		mem_wb_reg.alu_result = ex_mem_reg.alu_result;
+		mem_wb_reg_next.alu_result = ex_mem_reg.alu_result;
 
 	return ex_mem_reg.name;
 }
 
 static char *excute_stage()
 {
+	strcpy(ex_mem_reg_next.name, id_ex_reg.name);
 	uint64_t input_1 = id_ex_reg.data_1;
 	uint64_t input_2;
 	enum alu_operations alu_operation;
 
-	if (id_ex_reg.ctl_ex.alu_src == 1)
+	if (id_ex_reg.alu_src == 1)
 		input_2 = id_ex_reg.extended_imm;
 	else
 		input_2 = id_ex_reg.data_2;
 
-	alu_operation = alu_control(id_ex_reg.ctl_ex.alu_op, id_ex_reg.inst.funct7_or_imm,
-				    id_ex_reg.inst.funct3);
+	alu_operation = alu_control(id_ex_reg.alu_op, id_ex_reg.funct7_or_imm, id_ex_reg.funct3);
 
 	alu_calculate(input_1, input_2, alu_operation);
 
@@ -423,14 +407,16 @@ static char *excute_stage()
 
 static char *instruction_decode_stage()
 {
-	signal_control(if_id_reg.inst.opcode);
+	signal_control(if_id_reg.opcode);
 
-	id_ex_reg.inst = if_id_reg.inst;
-	id_ex_reg.extended_imm = (uint64_t)if_id_reg.inst.funct7_or_imm;
-	id_ex_reg.rd = if_id_reg.inst.rd;
+	// throw
+	id_ex_reg_next = if_id_reg;
 
-	id_ex_reg.data_1 = register_file[if_id_reg.inst.rs1];
-	id_ex_reg.data_2 = register_file[if_id_reg.inst.rs2];
+	// sign-extension
+	id_ex_reg_next.extended_imm = (uint64_t)if_id_reg.funct7_or_imm;
+
+	id_ex_reg_next.data_1 = register_file[if_id_reg.rs1];
+	id_ex_reg_next.data_2 = register_file[if_id_reg.rs2];
 
 	return if_id_reg.name;
 }
@@ -438,14 +424,46 @@ static char *instruction_decode_stage()
 static char *instruction_fetch_stage()
 {
 
-	if_id_reg.inst.funct7_or_imm = inst_pc->funct7_or_imm;
-	if_id_reg.inst.rs2 = inst_pc->rs2;
-	if_id_reg.inst.rs1 = inst_pc->rs1;
-	if_id_reg.inst.funct3 = inst_pc->funct3;
-	if_id_reg.inst.rd = inst_pc->rd;
-	if_id_reg.inst.opcode = inst_pc->opcode;
+	if_id_reg_next.funct7_or_imm = pc->funct7_or_imm;
+	if_id_reg_next.rs2 = pc->rs2;
+	if_id_reg_next.rs1 = pc->rs1;
+	if_id_reg_next.funct3 = pc->funct3;
+	if_id_reg_next.rd = pc->rd;
+	if_id_reg_next.opcode = pc->opcode;
 
-	return inst_pc->name;
+	strcpy(if_id_reg_next.name, pc->name);
+
+	pc_next = pc->next;
+
+	return pc->name;
+}
+
+static void clock_first(int cycle)
+{
+	// hazard detect
+
+	char *wb_name = NULL;
+	char *mem_name = NULL;
+	char *ex_name = NULL;
+	char *id_name = NULL;
+	char *if_name = NULL;
+
+	wb_name = write_back_stage();
+	mem_name = memory_stage();
+	ex_name = excute_stage();
+	id_name = instruction_decode_stage();
+	if_name = instruction_fetch_stage();
+
+	printf("%-8d%-8s%-8s%-8s%-8s%s\n", cycle, if_name, id_name, ex_name, mem_name, wb_name);
+}
+
+static void clock_next()
+{
+	if_id_reg = if_id_reg_next;
+	id_ex_reg = id_ex_reg_next;
+	ex_mem_reg = ex_mem_reg_next;
+	mem_wb_reg = mem_wb_reg_next;
+	pc = pc_next;
 }
 
 int main(int argc, char *argv[])
@@ -470,52 +488,12 @@ int main(int argc, char *argv[])
 	int cycle = 1;
 
 	while (1) {
-		char *wb_name;
-		char *mem_name;
-		char *ex_name;
-		char *id_name;
-		char *if_name;
 
-		wb_name = write_back_stage();
-
-		mem_name = memory_stage();
-
-		ex_name = excute_stage();
-
-		id_name = instruction_decode_stage();
-
-		if (inst_pc != NULL) {
-			if_name = instruction_fetch_stage();
-			inst_pc = inst_pc->next;
-		} else {
-
-			strcpy(if_name, "--");
-		}
-
-		if (*wb_name == 0)
-			strcpy(wb_name, "--");
-		if (*mem_name == 0)
-			strcpy(mem_name, "--");
-		if (*ex_name == 0)
-			strcpy(ex_name, "--");
-		if (*id_name == 0)
-			strcpy(id_name, "--");
-
-		if (strcmp(if_name, "--") == 0 && strcmp(id_name, "--") == 0 &&
-		    strcmp(ex_name, "--") == 0 && strcmp(mem_name, "--") == 0 &&
-		    strcmp(wb_name, "--") == 0) {
-			exit(EXIT_SUCCESS);
-		}
-
-		printf("%-8d%-8s%-8s%-8s%-8s%s\n", cycle, if_name, id_name, ex_name, mem_name,
-		       wb_name);
-
-		strcpy(mem_wb_reg.name, ex_mem_reg.name);
-		strcpy(ex_mem_reg.name, id_ex_reg.name);
-		strcpy(id_ex_reg.name, if_id_reg.name);
-		strcpy(if_id_reg.name, if_name);
+		clock_first(cycle);
+		clock_next();
 
 		cycle++;
+		sleep(1);
 	}
 
 	// =========자원해제==========
